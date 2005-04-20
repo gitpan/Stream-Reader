@@ -4,4 +4,3 @@ MANIFEST
 README
 t/Stream-Reader.t
 lib/Stream/Reader.pm
-lib/Stream/Reader.pod

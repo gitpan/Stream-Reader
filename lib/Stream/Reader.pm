@@ -3,16 +3,22 @@ package Stream::Reader;
 use 5.005;
 use strict;
 
-our $VERSION = '0.03';
+our $VERSION = '0.06';
 
-# Global variable(s) declaraion
-my $_arg;
+# Global/system variables
 
-# Public method: Constructor
-sub new {
+our $CODE;
+our $AUTOLOAD;
+our $Shift;
+
+# Autoloaded code
+$CODE ||= {
+
+# Constructor
+new => <<'ENDC',
   my $class = shift;
   my $input = shift;
-  my $param = ( ref($_arg = shift) eq 'HASH' )? $_arg : {};
+  my $param = ( ref($Shift = shift) eq 'HASH' )? $Shift : {};
   my $self  = {
       # System parameters
     input    => $input,
@@ -33,13 +39,18 @@ sub new {
     Error  => 0
   };
   return bless( $self => $class );
-}
+ENDC
 
-# Public method: readto()
-sub readto {
+# Destructor
+DESTROY => <<'ENDC',
+  return 1;
+ENDC
+
+# Public method
+readto => <<'ENDC',
   my $self  = shift;
-  my $delim = ( ref($_arg = shift) eq 'ARRAY' )? $_arg : [$_arg];
-  my $param = ( ref($_arg = shift) eq 'HASH' )? $_arg : {};
+  my $delim = ( ref($Shift = shift) eq 'ARRAY' )? $Shift : [$Shift];
+  my $param = ( ref($Shift = shift) eq 'HASH' )? $Shift : {};
   my $limit = ( defined($param->{Limit}) and $param->{Limit} >= 0 )? $param->{Limit} : 1e10;
   my $wcase = ( $param->{Mode} and index(uc($param->{Mode}),'I') != -1 );
   my $max_d = 0;
@@ -51,8 +62,11 @@ sub readto {
   #  - reseting some statistic variables
   @$self{ qw(Readed Stored Match) } = ( (0)x2, '' );
   #  - initialize output stream, if this is SCALAR and initialization required
-  ${$param->{Out}} = '' if( UNIVERSAL::isa($param->{Out},'SCALAR')
-    and !( defined(${$param->{Out}}) and $param->{Mode} and index(uc($param->{Mode}),'A') != -1 ));
+  if( UNIVERSAL::isa($param->{Out},'SCALAR')
+    and !( defined(${$param->{Out}}) and $param->{Mode} and index(uc($param->{Mode}),'A') != -1 )
+  ) {
+    ${$param->{Out}} = '';
+  }
   #  - maximal and minimal delimiter length detection
   foreach( @$delim ) {
     $max_d = length if $max_d < length;
@@ -126,13 +140,13 @@ sub readto {
       return( ( $param->{Mode} and index(uc($param->{Mode}),'E') != -1 )? 0 : 1 );
     }
   }
-}
+ENDC
 
-# Public method: readsome()
-sub readsome {
+# Public method
+readsome => <<'ENDC',
   my $self  = shift;
-  my $limit = ( defined($_arg = shift) and $_arg >= 0 )? $_arg : 1e10;
-  my $param = ( ref($_arg = shift) eq 'HASH' )? $_arg : {};
+  my $limit = ( defined($Shift = shift) and $Shift >= 0 )? $Shift : 1e10;
+  my $param = ( ref($Shift = shift) eq 'HASH' )? $Shift : {};
   my $rsize;
   my $error;
 
@@ -140,8 +154,11 @@ sub readsome {
   #  - reseting some statistic variables
   @$self{ qw(Readed Stored Match) } = ( (0)x2, '' );
   #  - initialize output stream, if this is SCALAR and initialization required
-  ${$param->{Out}} = '' if( UNIVERSAL::isa($param->{Out},'SCALAR')
-    and !( defined(${$param->{Out}}) and $param->{Mode} and index(uc($param->{Mode}),'A') != -1 ));
+  if( UNIVERSAL::isa($param->{Out},'SCALAR')
+    and !( defined(${$param->{Out}}) and $param->{Mode} and index(uc($param->{Mode}),'A') != -1 )
+  ) {
+    ${$param->{Out}} = '';
+  }
   #  - checking status
   return 0 unless $self->{status};
 
@@ -179,40 +196,40 @@ sub readsome {
     }
   }
   return 1;
-}
+ENDC
 
 # Private method: BOOL = _fill_buffer()
 # Trying to filling buffer with new portion of data. Returns false on errors
-sub _fill_buffer {
+_fill_buffer => <<'ENDC',
   my $self = shift;
-  return 1 unless $self->{inlimit}; # checking stream limit
 
-  my $buffer;
-  my $result;
-  # Getting new portion of data
-  $result = $self->_read( \($buffer),
-    ( $self->{buffsize} > $self->{inlimit} )? $self->{inlimit} : $self->{buffsize} );
-
-  # Checking data
-  if( !defined($result) or ($] >= 5.008001
-    and !$self->{mode_U} and $result and utf8::is_utf8($buffer) and !utf8::valid($buffer)
-  )) {
-    # Error reading or malformed data
-    @$self{ qw(Error status inlimit bufferA bufferB) } = ( qw(1 0 0), ('')x2 );
-    return 0;
+  if( $self->{inlimit} ) { # checking stream limit
+    my $buffer;
+    my $result;
+    # Getting new portion of data
+    $result = $self->_read( \$buffer,
+      ( $self->{buffsize} > $self->{inlimit} )? $self->{inlimit} : $self->{buffsize}
+    );
+    # Checking data
+    if( !defined($result) or ($] >= 5.008001
+      and !$self->{mode_U} and $result and utf8::is_utf8($buffer) and !utf8::valid($buffer)
+    )) {
+      # Error reading or malformed data
+      @$self{ qw(Error status inlimit bufferA bufferB) } = ( qw(1 0 0), ('')x2 );
+      return undef;
+    } else {
+      # Fixing stream limit and appending data to buffers
+      $self->{inlimit}  = $result? ( $self->{inlimit} - $result ) : 0;
+      $self->{bufferA} .= $buffer;
+      $self->{bufferB} .= lc($buffer) if $self->{mode_B};
+    }
   }
-  else {
-    # Fixing stream limit and appending data to buffers
-    $self->{inlimit}  = $result? ( $self->{inlimit} - $result ) : 0;
-    $self->{bufferA} .= $buffer;
-    $self->{bufferB} .= lc($buffer) if $self->{mode_B};
-    return 1;
-  }
-}
+  return 1;
+ENDC
 
 # Private method: LENGTH = SELF->_read(STRREF,LENGTH)
 # Trying to reading data from input stream into STRREF
-sub _read {
+_read => <<'ENDC',
   my $self   = shift;
   my $strref = shift;
   my $length = shift;
@@ -232,11 +249,11 @@ sub _read {
     $result = read( $self->{input}, $$strref, $length );
   }
   return $result;
-}
+ENDC
 
 # Private method: BOOL = SELF->_write(OUTPUT,STRREF)
 # Storing data in output stream
-sub _write {
+_write => <<'ENDC',
   my $self   = shift;
   my $output = shift;
   my $strref = shift;
@@ -253,6 +270,271 @@ sub _write {
     $result = print( {$output} $$strref );
   }
   return $result;
+ENDC
+
+};
+
+sub AUTOLOAD {
+  my($name) = $AUTOLOAD =~ /([^:]+)$/;
+  unless( exists $CODE->{$name} ) {
+    _croak("Undefined subroutine &$AUTOLOAD called") if $^W;
+  } else {
+    eval "sub $name { ".delete($CODE->{$name})." }";
+    if( $@ and $^W ) {
+      warn $@; # it is better then nothing..
+    }
+    goto &$AUTOLOAD;
+  }
 }
 
+# Handling warnings
+sub _croak { require Carp; Carp::croak(shift) }
+
 1;
+
+__END__
+
+=head1 NAME
+
+Stream::Reader - is a stream reader
+
+=head1 SYNOPSIS
+
+  # Input stream can be reference to TYPEGLOB or SCALAR, output stream
+  # can be the same types or undefined
+
+  # Constructor
+  $stream = Stream::Reader->new( \*IN,
+    { Limit => $limit, BuffSize => $buffsize, Mode => 'UB' } );
+
+  # Reading all before delimiter beginning from current position.
+  # Delimiter is SCALAR or reference to array with many SCALAR's.
+  # Returns true value on succesfull matching or if end of stream
+  # expected at first time
+  $bool = $stream->readto( $delimiter,
+    { Out => \*OUT, Limit => $limit, Mode => 'AIE' } );
+
+  # Reading fixed number of chars beginning from current position.
+  # Returns true value if was readed number of chars more then zero or
+  # end of stream was not expected yet
+  $bool = $stream->readsome( $limit, { Out => \*OUT, Mode => 'A' } );
+
+  # Mode is string, what can contains:
+  #  U - modificator for constructor. disable utf-8 checking
+  #  B - modificator for constructor. enable second buffer for speed up
+  #      case insensitive search
+  #  A - modificator for readto() and readsome(). appending data to
+  #      output stream, if stream is SCALAR
+  #  I - modificator for readto(). enable case insensitive search
+  #  E - modificator for readto(). at end of input stream alltimes
+  #      returns false value
+
+  $number = $stream->{Total};  # total number of readed chars
+  $number = $stream->{Readed}; # number of readed chars at last
+                               # operation (without matched string
+                               # length at readto() method)
+  $number = $stream->{Stored}; # number of succesfully stored chars
+                               # at last operation
+  $string = $stream->{Match};  # matched string at last operation
+                               # (actually for readto() only)
+  $bool   = $stream->{Error};  # error status. true on error
+
+=head1 DESCRIPTION
+
+This is utility intended for reading data from streams. Can be used
+for "on the fly" parsing big volumes data.
+
+=head1 METHODS
+
+=over 4
+
+=item OBJ = Stream::Reader->new( INPUT, { ... Params ... } )
+
+The constructor method instantiates a new Stream::Reader object.
+
+INPUT - is a reference to file stream, opened for reading,
+or reference to defined string. This is an obligatory parameter.
+
+Params (all optionaly):
+
+=over 2
+
+Limit - limit size of input stream data in characters. If this
+parameter is absent, not defined or less then zero, then all data
+from input stream will be available for reading.
+
+BuffSize - size of buffer in characters. If this parameter is absent,
+not defined or less then zero, then will be used default buffer size
+32768 characters.
+
+FLAGS - 2 modificators are available in this method:
+
+Mode - is string with letters-modificators:
+
+=over 2
+
+B - use second buffer. Can really speed up search in case
+insensitive mode.
+
+U - disable UTF-8 data check in UTF-8 mode. Use this flag if you are
+absolutely sure, that your UTF-8 data is valid.
+
+=back
+
+=back
+
+=item RESULT = OBJ->readto( DELIMITER, { ... Params ... } )
+
+This method reads all data from input stream before first found
+delimiter, beginning from current position.
+
+RESULT - boolean value. True value if successfuly found delimeter
+or and of input stream has expected at first time. False value
+otherwise, or in case of reading error.
+
+DELIMETER - is a string-delimeter or reference to array with
+many delimeters. This is an obligatory parameter and must be
+defined.
+
+Remember! In case of many delimiters, left delimiter alltimes have
+more priority then right!
+
+Params (all optionaly):
+
+=over 2
+
+Out - is a reference to file stream, opened for writing,
+or reference to string. If this parameter is absent then data
+will not stored.
+
+Limit - size in characters. Defines, the maximum number of
+characters that must be stored in Out. If this paramter is absent,
+not defined or less then zero, then this method will be trying to
+store all readed data.
+
+Mode - is string with letters-modificators:
+
+=over 2
+
+A - appendig data to Out if Out is a reference to string.
+
+I - search in case insensitive mode.
+
+E - at the end of input stream returns only false value. Without this
+modificator, if end of stream expected at first time, then will be
+returned true value.
+
+=back
+
+=back
+
+=item RESULT = OBJ->readsome( LIMIT, { ... Params ... } )
+
+This method reads fixed number of characters from input stream
+beginning from current position.
+
+RESULT - boolean value. True value, if any characters were read or
+end of input stream is not expected yet. False value otherwise, or
+in case of reading error.
+
+LIMIT - limit size in characters, how many it is necessary to read.
+If this parameter is absent, not defined or less then zero, then will
+be read all available data from input stream.
+
+Params (all optionaly):
+
+=over 2
+
+Out - the same as in readto() method.
+
+Mode - is string with letters-modificators:
+
+=over 2
+
+A - the same as in readto() method.
+
+=back
+
+=back
+
+=item Statistics:
+
+OBJ->{Total} - total number of readed characters. Warning! This
+module using block reading and real position in stream is different.
+
+OBJ->{Readed} - number of readed characters at last operation
+(without matched string length at readto() method).
+
+OBJ->{Stored} - number of succesfully stored chars at last operation
+
+OBJ->{Match} - matched string at last operation (actually for
+readto() only)
+
+OBJ->{Error} - boolen error status. At any reading erorrs
+all operations will be stopes and this flag turned to true value.
+
+=back
+
+=head1 UTF-8 SUPPORT
+
+Fully supported when using perl version 5.8.1, or higher. Input
+stream, output stream and delimiters should be in UTF-8 mode. If,
+during reading data from input stream in UTF-8 mode, will be detected
+malformed data, then will be stoped any operations and status Error
+turned to true value.
+
+=head1 WARNINGS
+
+Remember! This class is using block reading and before
+destruct class-object, you should work with input stream only
+through these class methods.
+
+In UTF-8 mode search without case sensitive is very slowly..
+It is because operation of changing case on UTF-8 data has
+slow speed.
+
+Remember, in UTF-8 mode all sizes of this module contain
+characters, not bytes!
+
+=head1 EXAMPLES
+
+=head2 Reading configuration file:
+
+  open( my $fh, '<', 'config.txt' ) or die $!;
+  my $stream = Stream::Reader->new($fh);
+
+  my $line;
+  while( $stream->readto( "\r\n", { Out => \$line } ) ) {
+    # Do something with $line
+  }
+  close($fh) or die $!;
+
+=head2 Find first one of substrings in file without case sensitive:
+
+  # Initialize array of strings
+  my @strings = ( 'word1', 'word2', 'phrase 1', 'word3' );
+
+  open( my $fh, '<', 'file.txt' ) or die $!;
+  my $stream = Stream::Reader->new($fh);
+
+  # Now, let trying to find one of substrings
+  my $r = $stream->readto( \@strings, { Mode => 'IE' } );
+
+  if( $r ) {
+    print "Found substring '$stream->{Match}'\n";
+  } elsif( $stream->{Error} ) {
+    print "Fatal error during reading file!\n";
+  } else {
+    print "Nothing found..\n";
+  }
+  close($fh) or die $!;
+
+=head1 Special thanks too:
+
+Andrey Fimushkin, E<lt>plohaja@mail.ruE<gt>
+
+=head1 AUTHOR
+
+Andrian Zubko aka Ondr, E<lt>ondr@cpan.orgE<gt>
+
+=cut

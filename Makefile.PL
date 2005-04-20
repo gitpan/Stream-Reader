@@ -9,6 +9,6 @@ use ExtUtils::MakeMaker;
 WriteMakefile(
   NAME           => 'Stream::Reader',
   VERSION_FROM   => 'lib/Stream/Reader.pm',
-  ABSTRACT_FROM  => 'lib/Stream/Reader.pod',
-  AUTHOR         => 'Andrian Zubko aka Ondr, <ondr@mail.ru>'
+  ABSTRACT_FROM  => 'lib/Stream/Reader.pm',
+  AUTHOR         => 'Andrian Zubko aka Ondr, <ondr@cpan.org>'
 );

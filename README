@@ -1,4 +1,4 @@
-Stream-Reader version 0.03
+Stream-Reader version 0.06
 ==========================
 
 This is utility intended for reading data from streams. Can be used
@@ -15,4 +15,4 @@ To install this module type the following:
 
 AUTHOR
 
-Andrian Zubko aka Ondr, <ondr@mail.ru>
+Andrian Zubko aka Ondr, <ondr@cpan.org>
